@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { View, StyleSheet, Text, TextInput, TouchableOpacity, ImageBackground, Modal, ScrollView, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, Text, TextInput, TouchableOpacity, ImageBackground, Modal, ScrollView, ActivityIndicator, FlatList } from 'react-native';
 import { Stack } from 'expo-router';
 import { Colors } from '@/theme/colors';
 import { useQuery } from '@tanstack/react-query';
@@ -10,6 +10,7 @@ export default function SearchFlightsScreen() {
   const [departureDate, setDepartureDate] = useState('');
   const [showResults, setShowResults] = useState(false);
   const [dateError, setDateError] = useState('');
+  const [showCalendar, setShowCalendar] = useState(false);
 
   const { data: flights, isLoading, error } = useQuery({
     queryKey: ['flights', origin, departureDate],
@@ -23,6 +24,8 @@ export default function SearchFlightsScreen() {
     }),
     enabled: showResults,
   });
+
+  const locations = flights?.dictionaries?.locations || {};
 
   const validateAndFormatDate = (text: string) => {
     // Remove any non-digit characters
@@ -59,6 +62,55 @@ export default function SearchFlightsScreen() {
 
     setDepartureDate(formatted);
   };
+
+  // Generate calendar data
+  const generateCalendarData = () => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = today.getMonth();
+    
+    // Get days in current month
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const firstDayOfMonth = new Date(year, month, 1).getDay();
+    
+    // Create calendar grid with empty cells for days before the 1st of the month
+    const calendarDays = [];
+    
+    // Add empty cells for days before the 1st of the month
+    for (let i = 0; i < firstDayOfMonth; i++) {
+      calendarDays.push({ day: '', date: null, disabled: true });
+    }
+    
+    // Add days of the month
+    for (let i = 1; i <= daysInMonth; i++) {
+      const date = new Date(year, month, i);
+      const dateString = date.toISOString().split('T')[0];
+      const isToday = i === today.getDate();
+      const isPastDate = date < new Date(today.setHours(0, 0, 0, 0));
+      
+      calendarDays.push({
+        day: i.toString(),
+        date: dateString,
+        isToday,
+        disabled: isPastDate,
+      });
+    }
+    
+    return calendarDays;
+  };
+  
+  const calendarData = useMemo(() => generateCalendarData(), []);
+  
+  const handleDateSelect = (dateString: string) => {
+    setDepartureDate(dateString);
+    setShowCalendar(false);
+    setDateError('');
+  };
+  
+  // Get current date for display
+  const currentDate = new Date();
+  const currentMonth = currentDate.toLocaleString('default', { month: 'long' });
+  const currentYear = currentDate.getFullYear();
 
   return (
     <View style={styles.container}>
@@ -97,15 +149,14 @@ export default function SearchFlightsScreen() {
 
             <View style={styles.inputContainer}>
               <Text style={styles.label}>Departure Date</Text>
-              <TextInput
-                style={[styles.input, dateError && styles.inputError]}
-                placeholder="YYYY-MM-DD"
-                placeholderTextColor={Colors.textSecondary}
-                value={departureDate}
-                onChangeText={validateAndFormatDate}
-                keyboardType="numeric"
-                maxLength={10}
-              />
+              <TouchableOpacity 
+                style={[styles.input, dateError && styles.inputError]} 
+                onPress={() => setShowCalendar(true)}
+              >
+                <Text style={departureDate ? styles.inputDateText : styles.placeholderText}>
+                  {departureDate || 'YYYY-MM-DD'}
+                </Text>
+              </TouchableOpacity>
               {dateError ? <Text style={styles.errorText}>{dateError}</Text> : null}
             </View>
 
@@ -115,6 +166,62 @@ export default function SearchFlightsScreen() {
             >
               <Text style={styles.buttonText}>View Destinations</Text>
             </TouchableOpacity>
+            
+            {/* Calendar Modal */}
+            <Modal
+              visible={showCalendar}
+              transparent={true}
+              animationType="fade"
+              onRequestClose={() => setShowCalendar(false)}
+            >
+              <View style={styles.calendarModalContainer}>
+                <View style={styles.calendarModalContent}>
+                  <View style={styles.calendarHeader}>
+                    <Text style={styles.calendarTitle}>Select Departure Date</Text>
+                    <TouchableOpacity onPress={() => setShowCalendar(false)}>
+                      <Text style={styles.closeButton}>Close</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <View style={styles.calendarContainer}>
+                    <Text style={styles.calendarMonthYear}>{currentMonth} {currentYear}</Text>
+                    <View style={styles.weekdaysContainer}>
+                      {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, index) => (
+                        <Text key={index} style={styles.weekdayText}>{day}</Text>
+                      ))}
+                    </View>
+                    <View style={styles.daysContainer}>
+                      <FlatList
+                        data={calendarData}
+                        renderItem={({ item }) => (
+                          <TouchableOpacity
+                            style={[
+                              styles.dayCell,
+                              item.isToday && styles.todayCell,
+                              item.date === departureDate && styles.selectedCell,
+                              item.disabled && styles.disabledCell
+                            ]}
+                            onPress={() => item.date && !item.disabled && handleDateSelect(item.date)}
+                            disabled={item.disabled || !item.date}
+                          >
+                            <Text style={[
+                              styles.dayText,
+                              item.isToday && styles.todayText,
+                              item.date === departureDate && styles.selectedDayText,
+                              item.disabled && styles.disabledDayText
+                            ]}>
+                              {item.day}
+                            </Text>
+                          </TouchableOpacity>
+                        )}
+                        keyExtractor={(item, index) => index.toString()}
+                        numColumns={7}
+                        scrollEnabled={false}
+                      />
+                    </View>
+                  </View>
+                </View>
+              </View>
+            </Modal>
           </View>
         </View>
       </ImageBackground>
@@ -141,7 +248,7 @@ export default function SearchFlightsScreen() {
                   <ActivityIndicator size="large" color={Colors.brandPrimary} />
                   <Text style={styles.loadingText}>Loading destinations...</Text>
                 </View>
-              ) : !flights?.length ? (
+              ) : !flights?.data?.length ? (
                 <View style={styles.emptyContainer}>
                   <Text style={styles.emptyText}>
                     {origin || departureDate 
@@ -150,7 +257,7 @@ export default function SearchFlightsScreen() {
                   </Text>
                 </View>
               ) : (
-                flights.map((flight, index) => (
+                flights.data.map((flight, index) => (
                   <View 
                     key={`${flight.origin}-${flight.destination}-${index}`} 
                     style={styles.flightCard}
@@ -166,10 +273,10 @@ export default function SearchFlightsScreen() {
                     <View style={styles.flightDetails}>
                       <View style={styles.flightRoute}>
                         <Text style={styles.flightCity}>
-                          {flight.origin}
+                          {flight.origin} - {locations[flight.origin]?.detailedName || ''}
                         </Text>
                         <Text style={styles.flightCity}>
-                          {flight.destination}
+                          {flight.destination} - {locations[flight.destination]?.detailedName || ''}
                         </Text>
                       </View>
                       <View style={styles.flightDates}>
@@ -195,6 +302,97 @@ export default function SearchFlightsScreen() {
 }
 
 const styles = StyleSheet.create({
+  inputDateText: {
+    color: Colors.textPrimary,
+    fontSize: 16,
+  },
+  placeholderText: {
+    color: Colors.textSecondary,
+    fontSize: 16,
+  },
+  calendarModalContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    padding: 20,
+  },
+  calendarModalContent: {
+    backgroundColor: Colors.backgroundPrimary,
+    borderRadius: 10,
+    width: '100%',
+    padding: 15,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  calendarHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  calendarTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: Colors.textPrimary,
+  },
+  calendarContainer: {
+    width: '100%',
+  },
+  calendarMonthYear: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 10,
+    color: Colors.textPrimary,
+  },
+  weekdaysContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: 10,
+  },
+  weekdayText: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    width: '14.28%',
+    textAlign: 'center',
+  },
+  daysContainer: {
+    width: '100%',
+  },
+  dayCell: {
+    width: '14.28%',
+    aspectRatio: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  dayText: {
+    fontSize: 14,
+    color: Colors.textPrimary,
+  },
+  todayCell: {
+    backgroundColor: 'rgba(201, 122, 75, 0.1)',
+  },
+  todayText: {
+    color: Colors.brandPrimary,
+    fontWeight: 'bold',
+  },
+  selectedCell: {
+    backgroundColor: Colors.brandPrimary,
+  },
+  selectedDayText: {
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+  disabledCell: {
+    opacity: 0.3,
+  },
+  disabledDayText: {
+    color: Colors.textSecondary,
+  },
   container: {
     flex: 1,
   },

@@ -26,6 +26,13 @@ export interface FlightDetails {
     flightDates: string;
     flightOffers: string;
   };
+  dictionaries?: {
+    currencies: Record<string, string>;
+    locations: Record<string, {
+      subType: string;
+      detailedName: string;
+    }>;
+  };
 }
 
 export interface FlightSearchResponse {
@@ -53,7 +60,7 @@ export interface FlightSearchResponse {
   warnings: any[];
 }
 
-export const searchFlights = async (params: FlightSearchParams): Promise<FlightDetails[]> => {
+export const searchFlights = async (params: FlightSearchParams): Promise<FlightSearchResponse> => {
   try {
     const accessToken = await getAccessToken();
     
@@ -86,10 +93,10 @@ export const searchFlights = async (params: FlightSearchParams): Promise<FlightD
 
         if (!response.data?.data) {
           console.warn('No flight data in response:', response.data);
-          return [];
+          return response.data; // Return the full response, even if data is empty
         }
 
-        return response.data.data;
+        return response.data; // Return the full response
       } catch (error) {
         lastError = error;
         if (axios.isAxiosError(error) && error.response?.status === 500) {

@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { View, ActivityIndicator, ScrollView } from 'react-native';
 import { ScreenWrapper } from '@/components/ui/molecules/ScreenWrapper/ScreenWrapper';
 import { Typography } from '@/components/ui/atoms/Typography/Typography';
@@ -6,20 +6,29 @@ import { SearchBar } from '@/components/ui/molecules/SearchBar/SearchBar';
 import { useDebounce } from '@/hooks/useDebounce';
 import { useFlightSearch } from '@/hooks/useFlightSearch';
 import { styles } from './FlightSearchScreen.styles';
-import { FlightSearchScreenProps } from './FlightSearchScreen.types';
+import { FlightSearchScreenProps, FlightDetails } from './FlightSearchScreen.types';
 import { Colors } from '@/theme/colors';
+import { FlightSearchResponse } from '@/services/flightService';
 
 export const FlightSearchScreen: React.FC<FlightSearchScreenProps> = () => {
   const [origin, setOrigin] = useState('');
   const [departureDate, setDepartureDate] = useState('');
+  const [dictionaries, setDictionaries] = useState<any>(null);
   
   const debouncedSetOrigin = useDebounce(setOrigin, 300);
   const debouncedSetDepartureDate = useDebounce(setDepartureDate, 300);
 
-  const { data: flights, isLoading, error } = useFlightSearch({
+  const { data: response, isLoading, error } = useFlightSearch({
     origin,
     departureDate,
-  });
+  }) as { data: FlightSearchResponse, isLoading: boolean, error: any };
+
+  const flights: FlightDetails[] = response?.data || [];
+  useEffect(() => {
+    if (response?.dictionaries) {
+      setDictionaries(response.dictionaries);
+    }
+  }, [response]);
 
   const handleOriginChange = useCallback(
     (value: string) => {
@@ -96,12 +105,12 @@ export const FlightSearchScreen: React.FC<FlightSearchScreenProps> = () => {
                 <Typography
                   styleName="Body/Body Text - Base - Bold"
                   color="textPrimary"
-                  i18nKey={flight.origin}
+                  i18nKey={`${flight.origin} - ${dictionaries?.locations?.[flight.origin]?.detailedName || flight.origin}`}
                 />
                 <Typography
                   styleName="Body/Body Text - Base"
                   color="textSecondary"
-                  i18nKey={flight.destination}
+                  i18nKey={`${flight.destination} - ${dictionaries?.locations?.[flight.destination]?.detailedName || flight.destination}`}
                 />
               </View>
               <View style={styles.flightDuration}>
