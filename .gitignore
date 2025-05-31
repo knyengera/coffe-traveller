@@ -39,3 +39,5 @@ yarn-error.*
 
 ios/
 android/
+
+/assets/smoke.mp4

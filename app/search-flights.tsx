@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { View, StyleSheet, Text, TextInput, TouchableOpacity, ImageBackground, Modal, ScrollView, ActivityIndicator, FlatList } from 'react-native';
 import { Stack } from 'expo-router';
 import { Colors } from '@/theme/colors';
@@ -11,6 +11,8 @@ export default function SearchFlightsScreen() {
   const [showResults, setShowResults] = useState(false);
   const [dateError, setDateError] = useState('');
   const [showCalendar, setShowCalendar] = useState(false);
+  const [displayedMonth, setDisplayedMonth] = useState(new Date().getMonth());
+  const [displayedYear, setDisplayedYear] = useState(new Date().getFullYear());
 
   const { data: flights, isLoading, error } = useQuery({
     queryKey: ['flights', origin, departureDate],
@@ -64,12 +66,13 @@ export default function SearchFlightsScreen() {
   };
 
   // Generate calendar data
-  const generateCalendarData = () => {
+  const generateCalendarData = useCallback((year: number, month: number) => {
     const today = new Date();
-    const year = today.getFullYear();
-    const month = today.getMonth();
+    const currentDate = today.getDate();
+    const currentMonth = today.getMonth();
+    const currentYear = today.getFullYear();
     
-    // Get days in current month
+    // Get days in specified month
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const firstDayOfMonth = new Date(year, month, 1).getDay();
     
@@ -85,7 +88,7 @@ export default function SearchFlightsScreen() {
     for (let i = 1; i <= daysInMonth; i++) {
       const date = new Date(year, month, i);
       const dateString = date.toISOString().split('T')[0];
-      const isToday = i === today.getDate();
+      const isToday = i === currentDate && month === currentMonth && year === currentYear;
       const isPastDate = date < new Date(today.setHours(0, 0, 0, 0));
       
       calendarDays.push({
@@ -97,9 +100,9 @@ export default function SearchFlightsScreen() {
     }
     
     return calendarDays;
-  };
+  }, []);
   
-  const calendarData = useMemo(() => generateCalendarData(), []);
+  const calendarData = useMemo(() => generateCalendarData(displayedYear, displayedMonth), [generateCalendarData, displayedYear, displayedMonth]);
   
   const handleDateSelect = (dateString: string) => {
     setDepartureDate(dateString);
@@ -107,10 +110,27 @@ export default function SearchFlightsScreen() {
     setDateError('');
   };
   
-  // Get current date for display
-  const currentDate = new Date();
-  const currentMonth = currentDate.toLocaleString('default', { month: 'long' });
-  const currentYear = currentDate.getFullYear();
+  // Navigation functions for calendar
+  const goToPreviousMonth = () => {
+    if (displayedMonth === 0) {
+      setDisplayedMonth(11);
+      setDisplayedYear(displayedYear - 1);
+    } else {
+      setDisplayedMonth(displayedMonth - 1);
+    }
+  };
+
+  const goToNextMonth = () => {
+    if (displayedMonth === 11) {
+      setDisplayedMonth(0);
+      setDisplayedYear(displayedYear + 1);
+    } else {
+      setDisplayedMonth(displayedMonth + 1);
+    }
+  };
+  
+  // Get displayed month and year for display
+  const displayedMonthName = new Date(displayedYear, displayedMonth).toLocaleString('default', { month: 'long' });
 
   return (
     <View style={styles.container}>
@@ -161,10 +181,11 @@ export default function SearchFlightsScreen() {
             </View>
 
             <TouchableOpacity 
-              style={styles.button}
+              style={[styles.button, (!origin || !departureDate) && styles.buttonDisabled]}
               onPress={() => setShowResults(true)}
+              disabled={!origin || !departureDate}
             >
-              <Text style={styles.buttonText}>View Destinations</Text>
+              <Text style={[styles.buttonText, (!origin || !departureDate) && styles.buttonTextDisabled]}>View Destinations</Text>
             </TouchableOpacity>
             
             {/* Calendar Modal */}
@@ -183,7 +204,15 @@ export default function SearchFlightsScreen() {
                     </TouchableOpacity>
                   </View>
                   <View style={styles.calendarContainer}>
-                    <Text style={styles.calendarMonthYear}>{currentMonth} {currentYear}</Text>
+                    <View style={styles.calendarNavigation}>
+                      <TouchableOpacity onPress={goToPreviousMonth} style={styles.calendarNavButton}>
+                        <Text style={styles.calendarNavButtonText}>←</Text>
+                      </TouchableOpacity>
+                      <Text style={styles.calendarMonthYear}>{displayedMonthName} {displayedYear}</Text>
+                      <TouchableOpacity onPress={goToNextMonth} style={styles.calendarNavButton}>
+                        <Text style={styles.calendarNavButtonText}>→</Text>
+                      </TouchableOpacity>
+                    </View>
                     <View style={styles.weekdaysContainer}>
                       {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, index) => (
                         <Text key={index} style={styles.weekdayText}>{day}</Text>
@@ -342,11 +371,26 @@ const styles = StyleSheet.create({
   calendarContainer: {
     width: '100%',
   },
+  calendarNavigation: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  calendarNavButton: {
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: `rgba(${parseInt(Colors.brandPrimary.slice(1, 3), 16)}, ${parseInt(Colors.brandPrimary.slice(3, 5), 16)}, ${parseInt(Colors.brandPrimary.slice(5, 7), 16)}, 0.1)`,
+  },
+  calendarNavButtonText: {
+    fontSize: 18,
+    color: Colors.brandPrimary,
+    fontWeight: 'bold',
+  },
   calendarMonthYear: {
     fontSize: 16,
     fontWeight: 'bold',
     textAlign: 'center',
-    marginBottom: 10,
     color: Colors.textPrimary,
   },
   weekdaysContainer: {
@@ -374,7 +418,7 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
   },
   todayCell: {
-    backgroundColor: 'rgba(201, 122, 75, 0.1)',
+    backgroundColor: `rgba(${parseInt(Colors.brandPrimary.slice(1, 3), 16)}, ${parseInt(Colors.brandPrimary.slice(3, 5), 16)}, ${parseInt(Colors.brandPrimary.slice(5, 7), 16)}, 0.1)`,
   },
   todayText: {
     color: Colors.brandPrimary,
@@ -444,16 +488,23 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   button: {
-    backgroundColor: '#c97a4b',
+    backgroundColor: Colors.brandPrimary,
     borderRadius: 24,
+    width: '100%',
     paddingVertical: 16,
     alignItems: 'center',
-    marginTop: 8,
+    marginTop: 16,
+  },
+  buttonDisabled: {
+    backgroundColor: '#808080', // Gray color for disabled state
   },
   buttonText: {
     color: '#fff',
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: 'bold',
+  },
+  buttonTextDisabled: {
+    opacity: 0.7,
   },
   modalContainer: {
     flex: 1,
@@ -481,7 +532,7 @@ const styles = StyleSheet.create({
   },
   closeButton: {
     fontSize: 16,
-    color: '#c97a4b',
+    color: Colors.brandPrimary,
     fontWeight: 'bold',
   },
   resultsContainer: {
